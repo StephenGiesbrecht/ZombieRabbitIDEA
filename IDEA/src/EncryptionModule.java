@@ -1,15 +1,19 @@
+import java.io.FileWriter;
+import java.io.IOException;
+import java.math.BigInteger;
+
 public class EncryptionModule {
 
-private final int ROUND_KEY_CONSTANT = 0;
-private final int KEY_BIT_LENGTH = 128;
-private final int SUBBLOCK_MAX = 65536;
+private static final int ROUND_KEY_CONSTANT = 0;
+private static final int KEY_BIT_LENGTH = 128;
+private static final int SUBBLOCK_MAX = 65536;
+private static final BigInteger MULTIPLICATION_MODULO = new BigInteger("" + (SUBBLOCK_MAX + 1));
 
 private String key;
 private int[] roundKeys = new int[52];
 
 public EncryptionModule(String key) {
 	this.key = parseHexKey(key);
-	System.out.println(this.key);
 	initRoundKeys();
 }
 
@@ -27,7 +31,8 @@ private void initRoundKeys() {
 	}
 }
 
-private String computeCipher(int[] subblocks, int[] keys) {
+private String computeCipher(int[] subblocks, int[] keys) throws IOException {
+	FileWriter fw = new FileWriter("out.txt");
 	int temp1, temp2, temp3;
 	for (int i = 0; i < 8; ++i) {
 		subblocks[0] = multiply(subblocks[0], keys[i * 6]);
@@ -47,12 +52,22 @@ private String computeCipher(int[] subblocks, int[] keys) {
 		temp3 = subblocks[3] ^ temp1;
 		subblocks[3] = subblocks[1] ^ temp1;
 		subblocks[1] = temp3;
+
+		StringBuffer sb = new StringBuffer();
+		for (int ctr = 0; ctr < 6; ++ctr) {
+			sb.append(keys[i * 6 + ctr]).append(", ");
+		}
+		fw.write(sb.toString() + "\n");
+		fw.write(subblocks[0] + ", " + subblocks[1] + ", " + subblocks[2] + ", " + subblocks[3] + "\n\n");
 	}
 
 	subblocks[0] = multiply(subblocks[0], keys[48]);
 	subblocks[1] = multiply(subblocks[1], keys[49]);
 	subblocks[2] = (subblocks[2] + keys[50]) % SUBBLOCK_MAX;
-	subblocks[3] = (subblocks[3] + keys[51] % SUBBLOCK_MAX);
+	subblocks[3] = (subblocks[3] + keys[51]) % SUBBLOCK_MAX;
+
+	fw.write(subblocks[0] + ", " + subblocks[1] + ", " + subblocks[2] + ", " + subblocks[3]);
+	fw.close();
 
 	StringBuffer sb = new StringBuffer();
 	for (int i = 0; i < 4; ++i) {
@@ -62,7 +77,7 @@ private String computeCipher(int[] subblocks, int[] keys) {
 
 }
 
-public String encryptBlock(String block) {
+public String encryptBlock(String block) throws IOException {
 	int subblocks[] = processSubblocks(block);
 	return computeCipher(subblocks, this.roundKeys);
 }
@@ -87,8 +102,9 @@ private int multiply(int a, int b) {
 		b = SUBBLOCK_MAX;
 	}
 
-	long result = (a * b) % (SUBBLOCK_MAX + 1);
-	return (result == SUBBLOCK_MAX ? 0 : (int) result);
+	BigInteger result = new BigInteger("" + a).multiply(new BigInteger("" + b));
+	result = result.mod(MULTIPLICATION_MODULO);
+	return (result.longValue() == SUBBLOCK_MAX ? 0 : result.intValue());
 }
 
 private String parseHexKey(String hexKey) {
@@ -108,11 +124,18 @@ private String parseHexKey(String hexKey) {
 }
 
 private int[] processSubblocks(String block) {
-	int messageSubblocks[] = new int[4];
-	for (int i = 0; i < block.length() / 4; ++i) {
-		messageSubblocks[i] = Integer.parseInt(block.substring(i * 4, (i + 1) * 4), 16);
+	long message = Long.parseUnsignedLong(block, 16);
+	int subblocks[] = new int[4];
+	StringBuffer sb = new StringBuffer();
+	for (int i = 0; i < Long.numberOfLeadingZeros(message); ++i) {
+		sb.append('0');
 	}
-	return messageSubblocks;
+	sb.append(Long.toUnsignedString(message, 2));
+	String binaryBlock = sb.toString();
+	for (int i = 0; i < 4; ++i) {
+		subblocks[i] = Integer.parseInt(binaryBlock.substring(i * 16, ((i + 1) * 16)), 2);
+	}
+	return subblocks;
 }
 
 public void test() {
@@ -121,11 +144,10 @@ public void test() {
 	}
 }
 
-public static void main(String args[]) {
+public static void main(String args[]) throws IOException {
 	EncryptionModule e = new EncryptionModule("00010002000300040005000600070008");
-	String message = "0000000100020003";
+	String message = "100020003";
 	String ciphertext = e.encryptBlock(message);
 	System.out.println(ciphertext);
-	System.out.println(Integer.parseInt(ciphertext, 16));
 }
 }
