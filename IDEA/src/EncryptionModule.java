@@ -147,7 +147,7 @@ public String encrypt(String message) {
 			nextBlock.append("ffffffffffffffff");
 
 		} else if (availableLength < 16) {
-			String hexChar = Integer.toHexString(16 - availableLength);
+			String hexChar = Integer.toHexString(15 - availableLength);
 			nextBlock.append(message.substring(currIndex));
 			for (int i = 0; i < 16 - availableLength; ++i) {
 				nextBlock.append(hexChar);
@@ -263,8 +263,8 @@ private String reconstructBlock(int[] subblocks) {
 }
 
 public static void main(String args[]) {
-	EncryptionModule e = new EncryptionModule("10002000300040005000600070008");
-	String message = "0000000100020003";
+	EncryptionModule e = new EncryptionModule("fff02ac0a00040005400603070008");
+	String message = "ef001da6020003a0";
 	String ciphertext = e.encrypt(message);
 	System.out.println(ciphertext);
 
