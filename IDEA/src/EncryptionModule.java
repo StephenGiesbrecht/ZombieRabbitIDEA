@@ -2,7 +2,7 @@ import java.math.BigInteger;
 
 public class EncryptionModule {
 
-private static final int ROUND_KEY_CONSTANT = 0;
+private static final int ROUND_KEY_CONSTANT = 3502;
 private static final int KEY_BIT_LENGTH = 128;
 private static final int SUBBLOCK_MAX = 65536;
 private final static BigInteger MULTIPLICATION_MOD = new BigInteger("" + (SUBBLOCK_MAX + 1));
@@ -180,7 +180,7 @@ private int[] processSubblocks(String block) {
 	long message = Long.parseUnsignedLong(block, 16);
 	int subblocks[] = new int[4];
 	for (int i = 3; i >= 0; --i) {
-		subblocks[i] = (short) (message >>> ((3 - i) * 16));
+		subblocks[i] = Short.toUnsignedInt((short) (message >>> ((3 - i) * 16)));
 	}
 	return subblocks;
 }
