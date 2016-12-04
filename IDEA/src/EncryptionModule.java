@@ -143,14 +143,8 @@ private String parseHexKey(String hexKey) {
 private int[] processSubblocks(String block) {
 	long message = Long.parseUnsignedLong(block, 16);
 	int subblocks[] = new int[4];
-	StringBuffer sb = new StringBuffer();
-	for (int i = 0; i < Long.numberOfLeadingZeros(message); ++i) {
-		sb.append('0');
-	}
-	sb.append(Long.toUnsignedString(message, 2));
-	String binaryBlock = sb.toString();
-	for (int i = 0; i < 4; ++i) {
-		subblocks[i] = Integer.parseInt(binaryBlock.substring(i * 16, ((i + 1) * 16)), 2);
+	for (int i = 3; i >= 0; --i) {
+		subblocks[i] = (short) (message >>> ((3 - i) * 16));
 	}
 	return subblocks;
 }
