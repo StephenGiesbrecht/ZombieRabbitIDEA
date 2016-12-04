@@ -109,17 +109,11 @@ private int multiply(int a, int b) {
 
 private String parseHexKey(String hexKey) {
 	StringBuffer sb = new StringBuffer();
-	for (int i = 0; i < hexKey.length(); i += 2) {
-		byte b = Byte.parseByte(hexKey.substring(i, i + 2), 16);
-		for (int j = 128; j >= 1; j = j / 2) {
-			if (b >= j) {
-				sb.append('1');
-				b -= j;
-			} else {
-				sb.append('0');
-			}
-		}
+	BigInteger key = new BigInteger(hexKey, 16);
+	for (int i = 0; i < KEY_BIT_LENGTH - key.bitLength(); ++i) {
+		sb.append('0');
 	}
+	sb.append(key.toString(2));
 	return sb.toString();
 }
 
@@ -145,7 +139,7 @@ public void test() {
 }
 
 public static void main(String args[]) throws IOException {
-	EncryptionModule e = new EncryptionModule("00010002000300040005000600070008");
+	EncryptionModule e = new EncryptionModule("10002000300040005000600070008");
 	String message = "100020003";
 	String ciphertext = e.encryptBlock(message);
 	System.out.println(ciphertext);
