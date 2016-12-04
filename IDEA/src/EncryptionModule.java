@@ -6,6 +6,7 @@ private static final int ROUND_KEY_CONSTANT = 3502;
 private static final int KEY_BIT_LENGTH = 128;
 private static final int SUBBLOCK_MAX = 65536;
 private final static BigInteger MULTIPLICATION_MOD = new BigInteger("" + (SUBBLOCK_MAX + 1));
+private static final long IV = 0x13572468;
 
 private int[] encKeys = new int[52];
 private int[] decKeys = new int[52];
@@ -55,23 +56,31 @@ private void initRoundKeys(String key) {
 
 public String decrypt(String ciphertext) {
 	StringBuffer result = new StringBuffer();
-	StringBuffer nextBlock = new StringBuffer();
+	StringBuffer blockSB = new StringBuffer();
 	int currIndex = 0;
 	int messageLength = ciphertext.length();
 	int requiredPadding = (16 - (messageLength % 16)) % 16;
+	long prevBlock = IV;
+	long currBlock;
 
 	for (int i = 0; i < requiredPadding; ++i) {
-		nextBlock.append('0');
+		blockSB.append('0');
 	}
 	if (requiredPadding != 0) {
-		nextBlock.append(ciphertext.substring(0, messageLength % 16));
+		blockSB.append(ciphertext.substring(0, messageLength % 16));
 		currIndex += messageLength % 16;
-		result.append(decryptBlock(nextBlock.toString()));
+
+		currBlock = Long.parseUnsignedLong(blockSB.toString(), 16);
+		result.append(getHexOutputBlock(decryptBlock(currBlock) ^ prevBlock));
+		prevBlock = currBlock;
 	}
 	while (currIndex < messageLength) {
-		nextBlock = new StringBuffer(ciphertext.substring(currIndex, currIndex + 16));
+		blockSB = new StringBuffer(ciphertext.substring(currIndex, currIndex + 16));
 		currIndex += 16;
-		result.append(decryptBlock(nextBlock.toString()));
+
+		currBlock = Long.parseUnsignedLong(blockSB.toString(), 16);
+		result.append(getHexOutputBlock(decryptBlock(currBlock) ^ prevBlock));
+		prevBlock = currBlock;
 	}
 
 	int resultLength = result.length();
@@ -88,7 +97,7 @@ public String decrypt(String ciphertext) {
  *  @param block The hexadecimal representation of the block to decrypt
  *  @return The hexadecimal representation of the plaintext, as a {@link String}
  */
-public String decryptBlock(String block) {
+public long decryptBlock(long block) {
 	int subblocks[] = processSubblocks(block);
 	return computeCipher(subblocks, this.decKeys);
 }
@@ -97,7 +106,7 @@ public String decryptBlock(String block) {
  * Computes the actual cipher. This same process is used for either encryption
  * or decryption depending on the set of round keys used
  */
-private String computeCipher(int[] subblocks, int[] keys) {
+private long computeCipher(int[] subblocks, int[] keys) {
 	int temp1, temp2, temp3;
 	for (int i = 0; i < 8; ++i) {
 		subblocks[0] = multiply(subblocks[0], keys[i * 6]);
@@ -134,30 +143,32 @@ private String computeCipher(int[] subblocks, int[] keys) {
 
 public String encrypt(String message) {
 	StringBuffer result = new StringBuffer();
-	StringBuffer nextBlock;
+	StringBuffer blockSB;
 	int currIndex = 0;
 	int messageLength = message.length();
+	long prevBlock = IV;
 
 	while (currIndex <= messageLength) {
 		int availableLength = messageLength - currIndex;
-		nextBlock = new StringBuffer();
+		blockSB = new StringBuffer();
 
 		if (availableLength == 0) {
 			currIndex++;
-			nextBlock.append("ffffffffffffffff");
+			blockSB.append("ffffffffffffffff");
 
 		} else if (availableLength < 16) {
 			String hexChar = Integer.toHexString(15 - availableLength);
-			nextBlock.append(message.substring(currIndex));
+			blockSB.append(message.substring(currIndex));
 			for (int i = 0; i < 16 - availableLength; ++i) {
-				nextBlock.append(hexChar);
+				blockSB.append(hexChar);
 			}
 
 		} else {
-			nextBlock.append(message.substring(currIndex, currIndex + 16));
+			blockSB.append(message.substring(currIndex, currIndex + 16));
 		}
 		currIndex += 16;
-		result.append(encryptBlock(nextBlock.toString()));
+		prevBlock = encryptBlock(Long.parseUnsignedLong(blockSB.toString(), 16) ^ prevBlock);
+		result.append(getHexOutputBlock(prevBlock));
 	}
 	return result.toString();
 
@@ -169,7 +180,7 @@ public String encrypt(String message) {
  * @param block The hexadecimal representation of the block to encrypt
  * @return The hexadecimal representation of the ciphertext, as a [@link String}
  */
-public String encryptBlock(String block) {
+public long encryptBlock(long block) {
 	int subblocks[] = processSubblocks(block);
 	return computeCipher(subblocks, this.encKeys);
 }
@@ -189,6 +200,15 @@ private int extractBits(String key, int startBit) {
 		currBit = (currBit + 1) % KEY_BIT_LENGTH;
 	}
 	return result;
+}
+
+private String getHexOutputBlock(long block) {
+	StringBuffer sb = new StringBuffer("");
+	for (int i = 0; i < Long.numberOfLeadingZeros(block) / 4; ++i) {
+		sb.append('0');
+	}
+	sb.append(Long.toHexString(block));
+	return sb.toString();
 }
 
 /*
@@ -237,11 +257,10 @@ private String parseHexKey(String hexKey) {
  * Split a 64-bit block into four 16-bit subblocks for processing
  */
 
-private int[] processSubblocks(String block) {
-	long message = Long.parseUnsignedLong(block, 16);
+private int[] processSubblocks(long block) {
 	int subblocks[] = new int[4];
 	for (int i = 3; i >= 0; --i) {
-		subblocks[i] = Short.toUnsignedInt((short) (message >>> ((3 - i) * 16)));
+		subblocks[i] = Short.toUnsignedInt((short) (block >>> ((3 - i) * 16)));
 	}
 	return subblocks;
 }
@@ -249,22 +268,17 @@ private int[] processSubblocks(String block) {
 /*
  * Reconstruct a 64-bit block from four 16-bit subblocks
  */
-private String reconstructBlock(int[] subblocks) {
+private long reconstructBlock(int[] subblocks) {
 	long block = 0;
 	for (int i = 3; i >= 0; --i) {
 		block += (long) (subblocks[i]) << ((3 - i) * 16);
 	}
-	StringBuffer sb = new StringBuffer("");
-	for (int i = 0; i < Long.numberOfLeadingZeros(block) / 4; ++i) {
-		sb.append('0');
-	}
-	sb.append(Long.toHexString(block));
-	return sb.toString();
+	return block;
 }
 
 public static void main(String args[]) {
 	EncryptionModule e = new EncryptionModule("fff02ac0a00040005400603070008");
-	String message = "ef001da6020003a0";
+	String message = "23fef001d26090b03a100";
 	String ciphertext = e.encrypt(message);
 	System.out.println(ciphertext);
 
