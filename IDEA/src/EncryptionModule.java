@@ -54,35 +54,35 @@ private void initRoundKeys(String key) {
 
 }
 
+/** Decrypt the given message
+ *
+ * @param message The hexadecimal representation of the ciphertext to decrypt
+ * @return The hexadecimal representation of the plaintext, as a {@link String}
+ * @throws IllegalArgumentException If the ciphertext does not evenly divide into blocks of 16 characters
+ */
 public String decrypt(String ciphertext) {
 	StringBuffer result = new StringBuffer();
 	StringBuffer blockSB = new StringBuffer();
 	int currIndex = 0;
-	int messageLength = ciphertext.length();
-	int requiredPadding = (16 - (messageLength % 16)) % 16;
 	long prevBlock = IV;
 	long currBlock;
+	int messageLength = ciphertext.length();
 
-	for (int i = 0; i < requiredPadding; ++i) {
-		blockSB.append('0');
-	}
-	if (requiredPadding != 0) {
-		blockSB.append(ciphertext.substring(0, messageLength % 16));
-		currIndex += messageLength % 16;
+	if (messageLength % 16 != 0)
+		throw new IllegalArgumentException("Ciphertext is not evenly divisible into blocks! It must be a multiple of 16 characters");
 
-		currBlock = Long.parseUnsignedLong(blockSB.toString(), 16);
-		result.append(getHexOutputBlock(decryptBlock(currBlock) ^ prevBlock));
-		prevBlock = currBlock;
-	}
 	while (currIndex < messageLength) {
 		blockSB = new StringBuffer(ciphertext.substring(currIndex, currIndex + 16));
 		currIndex += 16;
 
+		// Take each block, decrypt, and XOR with previous ciphertext block for
+		// CBC mode of operation
 		currBlock = Long.parseUnsignedLong(blockSB.toString(), 16);
 		result.append(getHexOutputBlock(decryptBlock(currBlock) ^ prevBlock));
 		prevBlock = currBlock;
 	}
 
+	// Remove padding bytes from the end of the message
 	int resultLength = result.length();
 	int paddingChars = Integer.parseInt("" + result.charAt(resultLength - 1), 16);
 	result.delete(resultLength - paddingChars - 1, resultLength);
@@ -97,7 +97,7 @@ public String decrypt(String ciphertext) {
  *  @param block The hexadecimal representation of the block to decrypt
  *  @return The hexadecimal representation of the plaintext, as a {@link String}
  */
-public long decryptBlock(long block) {
+private long decryptBlock(long block) {
 	int subblocks[] = processSubblocks(block);
 	return computeCipher(subblocks, this.decKeys);
 }
@@ -126,11 +126,6 @@ private long computeCipher(int[] subblocks, int[] keys) {
 		temp3 = subblocks[3] ^ temp1;
 		subblocks[3] = subblocks[1] ^ temp1;
 		subblocks[1] = temp3;
-
-		StringBuffer sb = new StringBuffer();
-		for (int ctr = 0; ctr < 6; ++ctr) {
-			sb.append(keys[i * 6 + ctr]).append(", ");
-		}
 	}
 
 	subblocks[0] = multiply(subblocks[0], keys[48]);
@@ -141,6 +136,11 @@ private long computeCipher(int[] subblocks, int[] keys) {
 	return reconstructBlock(subblocks);
 }
 
+/** Encrypt the given message
+ *
+ * @param message The hexadecimal representation of the plaintext to encrypt
+ * @return The hexadecimal representation of the ciphertext, as a {@link String}
+ */
 public String encrypt(String message) {
 	StringBuffer result = new StringBuffer();
 	StringBuffer blockSB;
@@ -152,10 +152,16 @@ public String encrypt(String message) {
 		int availableLength = messageLength - currIndex;
 		blockSB = new StringBuffer();
 
+		// Apply extra block of padding if message evenly splits into blocks
+		// This guarantees there will always be some padding so decryption
+		// can identify padding bits accurately
 		if (availableLength == 0) {
 			currIndex++;
 			blockSB.append("ffffffffffffffff");
 
+			// Pad partial block. Padding consists of of N half-bytes, each with
+			// value N-1,
+			// such that the total length of the block becomes 8 bytes
 		} else if (availableLength < 16) {
 			String hexChar = Integer.toHexString(15 - availableLength);
 			blockSB.append(message.substring(currIndex));
@@ -163,10 +169,13 @@ public String encrypt(String message) {
 				blockSB.append(hexChar);
 			}
 
+			// Directly extract blocks that need no padding
 		} else {
 			blockSB.append(message.substring(currIndex, currIndex + 16));
 		}
 		currIndex += 16;
+
+		// Encrypt block and XOR with previous block for CBC mode of operation
 		prevBlock = encryptBlock(Long.parseUnsignedLong(blockSB.toString(), 16) ^ prevBlock);
 		result.append(getHexOutputBlock(prevBlock));
 	}
@@ -180,7 +189,7 @@ public String encrypt(String message) {
  * @param block The hexadecimal representation of the block to encrypt
  * @return The hexadecimal representation of the ciphertext, as a [@link String}
  */
-public long encryptBlock(long block) {
+private long encryptBlock(long block) {
 	int subblocks[] = processSubblocks(block);
 	return computeCipher(subblocks, this.encKeys);
 }
@@ -202,6 +211,10 @@ private int extractBits(String key, int startBit) {
 	return result;
 }
 
+/*
+ * Converts a binary block into a hexidecimal string for output. Keeps any
+ * leading 0s as those are important for middle blocks in a longer message
+ */
 private String getHexOutputBlock(long block) {
 	StringBuffer sb = new StringBuffer("");
 	for (int i = 0; i < Long.numberOfLeadingZeros(block) / 4; ++i) {
