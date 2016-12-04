@@ -7,6 +7,7 @@ public class EncryptionModule {
 private static final int ROUND_KEY_CONSTANT = 0;
 private static final int KEY_BIT_LENGTH = 128;
 private static final int SUBBLOCK_MAX = 65536;
+private final static BigInteger MULTIPLICATION_MOD = new BigInteger("" + (SUBBLOCK_MAX + 1));
 
 private int[] encKeys = new int[52];
 private int[] decKeys = new int[52];
@@ -28,14 +29,9 @@ private void initRoundKeys(String key) {
 		}
 	}
 
-	BigInteger multplicationMod = new BigInteger("" + (SUBBLOCK_MAX + 1));
-	BigInteger bigKey;
 	for (int i = 0; i < 48; i += 6) {
-		bigKey = new BigInteger("" + encKeys[48 - i]);
-		decKeys[i] = bigKey.modInverse(multplicationMod).intValue();
-
-		bigKey = new BigInteger("" + encKeys[49 - i]);
-		decKeys[i + 1] = bigKey.modInverse(multplicationMod).intValue();
+		decKeys[i] = getMultiplicativeInverse(encKeys[48 - i]);
+		decKeys[i + 1] = getMultiplicativeInverse(encKeys[49 - i]);
 
 		decKeys[i + 2] = SUBBLOCK_MAX - encKeys[50 - i];
 		decKeys[i + 3] = SUBBLOCK_MAX - encKeys[51 - i];
@@ -44,11 +40,8 @@ private void initRoundKeys(String key) {
 		decKeys[i + 5] = encKeys[47 - i];
 	}
 
-	bigKey = new BigInteger("" + encKeys[0]);
-	decKeys[48] = bigKey.modInverse(multplicationMod).intValue();
-
-	bigKey = new BigInteger("" + encKeys[1]);
-	decKeys[49] = bigKey.mod(multplicationMod).intValue();
+	decKeys[48] = getMultiplicativeInverse(encKeys[0]);
+	decKeys[49] = getMultiplicativeInverse(encKeys[1]);
 
 	decKeys[50] = SUBBLOCK_MAX - encKeys[2];
 	decKeys[51] = SUBBLOCK_MAX - encKeys[3];
@@ -116,6 +109,12 @@ private int getBits(String key, int startBit) {
 		currBit = (currBit + 1) % KEY_BIT_LENGTH;
 	}
 	return result;
+}
+
+private int getMultiplicativeInverse(int val) {
+	BigInteger bigKey = (new BigInteger("" + (val == 0 ? SUBBLOCK_MAX : val)));
+	int result = bigKey.modInverse(MULTIPLICATION_MOD).intValue();
+	return (result == SUBBLOCK_MAX ? 0 : result);
 }
 
 private int multiply(int a, int b) {
