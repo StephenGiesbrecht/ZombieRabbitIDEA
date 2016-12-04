@@ -156,25 +156,11 @@ private int[] processSubblocks(String block) {
 }
 
 private String reconstructBlock(int[] subblocks) {
-	StringBuffer sb = new StringBuffer();
-	int hexZeros;
-	boolean includeZeros = false;
-	for (int i = 0; i < 4; ++i) {
-		if (includeZeros) {
-			hexZeros = (Integer.numberOfLeadingZeros(subblocks[i]) - 16) / 4;
-			for (int j = 0; j < hexZeros; ++j) {
-				sb.append('0');
-			}
-			sb.append(Integer.toString(subblocks[i], 16));
-		} else {
-			if (subblocks[i] == 0) {
-				continue;
-			}
-			sb.append(Integer.toString(subblocks[i], 16));
-			includeZeros = true;
-		}
+	long block = 0;
+	for (int i = 3; i >= 0; --i) {
+		block += (long) (subblocks[i]) << ((3 - i) * 16);
 	}
-	return sb.toString();
+	return Long.toHexString(block);
 }
 
 public void test() {
