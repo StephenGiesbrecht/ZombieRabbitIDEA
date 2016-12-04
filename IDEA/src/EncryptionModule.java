@@ -7,7 +7,6 @@ public class EncryptionModule {
 private static final int ROUND_KEY_CONSTANT = 0;
 private static final int KEY_BIT_LENGTH = 128;
 private static final int SUBBLOCK_MAX = 65536;
-private static final BigInteger MULTIPLICATION_MODULO = new BigInteger("" + (SUBBLOCK_MAX + 1));
 
 private String key;
 private int[] roundKeys = new int[52];
@@ -102,9 +101,8 @@ private int multiply(int a, int b) {
 		b = SUBBLOCK_MAX;
 	}
 
-	BigInteger result = new BigInteger("" + a).multiply(new BigInteger("" + b));
-	result = result.mod(MULTIPLICATION_MODULO);
-	return (result.longValue() == SUBBLOCK_MAX ? 0 : result.intValue());
+	long result = (long) (a) * b % (SUBBLOCK_MAX + 1);
+	return result == SUBBLOCK_MAX ? 0 : (int) (result);
 }
 
 private String parseHexKey(String hexKey) {
