@@ -1,5 +1,3 @@
-import java.io.FileWriter;
-import java.io.IOException;
 import java.math.BigInteger;
 
 public class EncryptionModule {
@@ -16,11 +14,18 @@ public EncryptionModule(String key) {
 	initRoundKeys(parseHexKey(key));
 }
 
+/*
+ * Generates the 52 round keys from the given secret key. Converting to a
+ * numeric value drops leading 0s so a string repsresentation is used. Because
+ * of this, actually rotating the key is impossible, so it is simulated with an
+ * offset. Also calculates the decryption keys by taking inverses of the
+ * encryption keys.
+ */
 private void initRoundKeys(String key) {
 	int currBit = 0;
 	int offset = 0;
 	for (int i = 0; i < 52; ++i) {
-		encKeys[i] = getBits(key, (currBit + offset) % KEY_BIT_LENGTH) ^ ROUND_KEY_CONSTANT;
+		encKeys[i] = extractBits(key, (currBit + offset) % KEY_BIT_LENGTH) ^ ROUND_KEY_CONSTANT;
 		if (i % 8 == 7) {
 			currBit = 0;
 			offset += 25;
@@ -48,13 +53,22 @@ private void initRoundKeys(String key) {
 
 }
 
-public String decrpyptBlock(String block) throws IOException {
+/**
+ * Decrypts a single block given the hexadecimal representation of the
+ * ciphertext.
+ *
+ *  @param block The hexadecimal representation of the block to decrypt, as a {@link String}
+ */
+public String decrpyptBlock(String block) {
 	int subblocks[] = processSubblocks(block);
 	return computeCipher(subblocks, this.decKeys);
 }
 
-private String computeCipher(int[] subblocks, int[] keys) throws IOException {
-	FileWriter fw = new FileWriter("out.txt");
+/*
+ * Computes the actual cipher. This same process is used for either encryption
+ * or decryption depending on the set of round keys used
+ */
+private String computeCipher(int[] subblocks, int[] keys) {
 	int temp1, temp2, temp3;
 	for (int i = 0; i < 8; ++i) {
 		subblocks[0] = multiply(subblocks[0], keys[i * 6]);
@@ -79,8 +93,6 @@ private String computeCipher(int[] subblocks, int[] keys) throws IOException {
 		for (int ctr = 0; ctr < 6; ++ctr) {
 			sb.append(keys[i * 6 + ctr]).append(", ");
 		}
-		fw.write(sb.toString() + "\n");
-		fw.write(subblocks[0] + ", " + subblocks[1] + ", " + subblocks[2] + ", " + subblocks[3] + "\n\n");
 	}
 
 	subblocks[0] = multiply(subblocks[0], keys[48]);
@@ -88,18 +100,25 @@ private String computeCipher(int[] subblocks, int[] keys) throws IOException {
 	subblocks[2] = (subblocks[2] + keys[50]) % SUBBLOCK_MAX;
 	subblocks[3] = (subblocks[3] + keys[51]) % SUBBLOCK_MAX;
 
-	fw.write(subblocks[0] + ", " + subblocks[1] + ", " + subblocks[2] + ", " + subblocks[3]);
-	fw.close();
-
 	return reconstructBlock(subblocks);
 }
 
-public String encryptBlock(String block) throws IOException {
+/**
+ * Encrypts a single block given the hexadecimal representation of the plaintext
+ *
+ * @param block The hexadecimal representation of the block to encrypt, as a {@link String}
+ */
+public String encryptBlock(String block) {
 	int subblocks[] = processSubblocks(block);
 	return computeCipher(subblocks, this.encKeys);
 }
 
-private int getBits(String key, int startBit) {
+/*
+ * Extracts a single 16-bit subkey from the given key, starting from the bit at
+ * the given index. The extracted bits are combined into a numeric
+ * representation
+ */
+private int extractBits(String key, int startBit) {
 	int result = 0;
 	int currBit = startBit;
 	for (int i = 15; i >= 0; --i) {
@@ -111,12 +130,21 @@ private int getBits(String key, int startBit) {
 	return result;
 }
 
+/*
+ * Calculates the multiplicative inverse of the given number modulo
+ * (SUBBLOCK_MAX + 1). As in the multiplication algorithm, 0 as input is treated
+ * as SUBBLOCK_MAX and SUBBLOCK_MAX as output is treated as 0
+ */
 private int getMultiplicativeInverse(int val) {
 	BigInteger bigKey = (new BigInteger("" + (val == 0 ? SUBBLOCK_MAX : val)));
 	int result = bigKey.modInverse(MULTIPLICATION_MOD).intValue();
 	return (result == SUBBLOCK_MAX ? 0 : result);
 }
 
+/*
+ * Multiply two numbers modulo (SUBBLOCK_MAX + 1). A 0 as input is treated as
+ * SUBBLOCK_MAX and SUBBLOCK_MAX as output is treated as 0
+ */
 private int multiply(int a, int b) {
 	if (a == 0) {
 		a = SUBBLOCK_MAX;
@@ -129,6 +157,11 @@ private int multiply(int a, int b) {
 	return result == SUBBLOCK_MAX ? 0 : (int) (result);
 }
 
+/*
+ * Parse a hexadecimal representation of a 128-bit key and return a binary
+ * representation. String representations are used instead of numeric to
+ * preserve leading 0s
+ */
 private String parseHexKey(String hexKey) {
 	StringBuffer sb = new StringBuffer();
 	BigInteger key = new BigInteger(hexKey, 16);
@@ -139,6 +172,10 @@ private String parseHexKey(String hexKey) {
 	return sb.toString();
 }
 
+/*
+ * Split a 64-bit block into four 16-bit subblocks for processing
+ */
+
 private int[] processSubblocks(String block) {
 	long message = Long.parseUnsignedLong(block, 16);
 	int subblocks[] = new int[4];
@@ -148,6 +185,9 @@ private int[] processSubblocks(String block) {
 	return subblocks;
 }
 
+/*
+ * Reconstruct a 64-bit block from four 16-bit subblocks
+ */
 private String reconstructBlock(int[] subblocks) {
 	long block = 0;
 	for (int i = 3; i >= 0; --i) {
@@ -156,13 +196,7 @@ private String reconstructBlock(int[] subblocks) {
 	return Long.toHexString(block);
 }
 
-public void test() {
-	for (int i = 0; i < encKeys.length; ++i) {
-		System.out.println(encKeys[i]);
-	}
-}
-
-public static void main(String args[]) throws IOException {
+public static void main(String args[]) {
 	EncryptionModule e = new EncryptionModule("10002000300040005000600070008");
 	String message = "100020003";
 	String ciphertext = e.encryptBlock(message);
