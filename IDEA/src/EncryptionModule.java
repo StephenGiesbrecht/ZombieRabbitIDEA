@@ -8,19 +8,18 @@ private static final int ROUND_KEY_CONSTANT = 0;
 private static final int KEY_BIT_LENGTH = 128;
 private static final int SUBBLOCK_MAX = 65536;
 
-private String key;
-private int[] roundKeys = new int[52];
+private int[] encKeys = new int[52];
+private int[] decKeys = new int[52];
 
 public EncryptionModule(String key) {
-	this.key = parseHexKey(key);
-	initRoundKeys();
+	initRoundKeys(parseHexKey(key));
 }
 
-private void initRoundKeys() {
+private void initRoundKeys(String key) {
 	int currBit = 0;
 	int offset = 0;
 	for (int i = 0; i < 52; ++i) {
-		roundKeys[i] = getBits(key, (currBit + offset) % KEY_BIT_LENGTH) ^ ROUND_KEY_CONSTANT;
+		encKeys[i] = getBits(key, (currBit + offset) % KEY_BIT_LENGTH) ^ ROUND_KEY_CONSTANT;
 		if (i % 8 == 7) {
 			currBit = 0;
 			offset += 25;
@@ -28,6 +27,37 @@ private void initRoundKeys() {
 			currBit = (currBit + 16) % KEY_BIT_LENGTH;
 		}
 	}
+
+	BigInteger multplicationMod = new BigInteger("" + (SUBBLOCK_MAX + 1));
+	BigInteger bigKey;
+	for (int i = 0; i < 48; i += 6) {
+		bigKey = new BigInteger("" + encKeys[48 - i]);
+		decKeys[i] = bigKey.modInverse(multplicationMod).intValue();
+
+		bigKey = new BigInteger("" + encKeys[49 - i]);
+		decKeys[i + 1] = bigKey.modInverse(multplicationMod).intValue();
+
+		decKeys[i + 2] = SUBBLOCK_MAX - encKeys[50 - i];
+		decKeys[i + 3] = SUBBLOCK_MAX - encKeys[51 - i];
+
+		decKeys[i + 4] = encKeys[46 - i];
+		decKeys[i + 5] = encKeys[47 - i];
+	}
+
+	bigKey = new BigInteger("" + encKeys[0]);
+	decKeys[48] = bigKey.modInverse(multplicationMod).intValue();
+
+	bigKey = new BigInteger("" + encKeys[1]);
+	decKeys[49] = bigKey.mod(multplicationMod).intValue();
+
+	decKeys[50] = SUBBLOCK_MAX - encKeys[2];
+	decKeys[51] = SUBBLOCK_MAX - encKeys[3];
+
+}
+
+public String decrpyptBlock(String block) throws IOException {
+	int subblocks[] = processSubblocks(block);
+	return computeCipher(subblocks, this.decKeys);
 }
 
 private String computeCipher(int[] subblocks, int[] keys) throws IOException {
@@ -68,17 +98,12 @@ private String computeCipher(int[] subblocks, int[] keys) throws IOException {
 	fw.write(subblocks[0] + ", " + subblocks[1] + ", " + subblocks[2] + ", " + subblocks[3]);
 	fw.close();
 
-	StringBuffer sb = new StringBuffer();
-	for (int i = 0; i < 4; ++i) {
-		sb.append(Integer.toString(subblocks[i], 16));
-	}
-	return sb.toString();
-
+	return reconstructBlock(subblocks);
 }
 
 public String encryptBlock(String block) throws IOException {
 	int subblocks[] = processSubblocks(block);
-	return computeCipher(subblocks, this.roundKeys);
+	return computeCipher(subblocks, this.encKeys);
 }
 
 private int getBits(String key, int startBit) {
@@ -130,9 +155,31 @@ private int[] processSubblocks(String block) {
 	return subblocks;
 }
 
+private String reconstructBlock(int[] subblocks) {
+	StringBuffer sb = new StringBuffer();
+	int hexZeros;
+	boolean includeZeros = false;
+	for (int i = 0; i < 4; ++i) {
+		if (includeZeros) {
+			hexZeros = (Integer.numberOfLeadingZeros(subblocks[i]) - 16) / 4;
+			for (int j = 0; j < hexZeros; ++j) {
+				sb.append('0');
+			}
+			sb.append(Integer.toString(subblocks[i], 16));
+		} else {
+			if (subblocks[i] == 0) {
+				continue;
+			}
+			sb.append(Integer.toString(subblocks[i], 16));
+			includeZeros = true;
+		}
+	}
+	return sb.toString();
+}
+
 public void test() {
-	for (int i = 0; i < roundKeys.length; ++i) {
-		System.out.println(roundKeys[i]);
+	for (int i = 0; i < encKeys.length; ++i) {
+		System.out.println(encKeys[i]);
 	}
 }
 
@@ -141,5 +188,8 @@ public static void main(String args[]) throws IOException {
 	String message = "100020003";
 	String ciphertext = e.encryptBlock(message);
 	System.out.println(ciphertext);
+
+	String plaintext = e.decrpyptBlock(ciphertext);
+	System.out.println(plaintext);
 }
 }
