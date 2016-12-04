@@ -53,13 +53,42 @@ private void initRoundKeys(String key) {
 
 }
 
+public String decrypt(String ciphertext) {
+	StringBuffer result = new StringBuffer();
+	StringBuffer nextBlock = new StringBuffer();
+	int currIndex = 0;
+	int messageLength = ciphertext.length();
+	int requiredPadding = (16 - (messageLength % 16)) % 16;
+
+	for (int i = 0; i < requiredPadding; ++i) {
+		nextBlock.append('0');
+	}
+	if (requiredPadding != 0) {
+		nextBlock.append(ciphertext.substring(0, messageLength % 16));
+		currIndex += messageLength % 16;
+		result.append(decryptBlock(nextBlock.toString()));
+	}
+	while (currIndex < messageLength) {
+		nextBlock = new StringBuffer(ciphertext.substring(currIndex, currIndex + 16));
+		currIndex += 16;
+		result.append(decryptBlock(nextBlock.toString()));
+	}
+
+	int resultLength = result.length();
+	int paddingChars = Integer.parseInt("" + result.charAt(resultLength - 1), 16);
+	result.delete(resultLength - paddingChars - 1, resultLength);
+
+	return result.toString();
+}
+
 /**
  * Decrypts a single block given the hexadecimal representation of the
  * ciphertext.
  *
- *  @param block The hexadecimal representation of the block to decrypt, as a {@link String}
+ *  @param block The hexadecimal representation of the block to decrypt
+ *  @return The hexadecimal representation of the plaintext, as a {@link String}
  */
-public String decrpyptBlock(String block) {
+public String decryptBlock(String block) {
 	int subblocks[] = processSubblocks(block);
 	return computeCipher(subblocks, this.decKeys);
 }
@@ -103,10 +132,42 @@ private String computeCipher(int[] subblocks, int[] keys) {
 	return reconstructBlock(subblocks);
 }
 
+public String encrypt(String message) {
+	StringBuffer result = new StringBuffer();
+	StringBuffer nextBlock;
+	int currIndex = 0;
+	int messageLength = message.length();
+
+	while (currIndex <= messageLength) {
+		int availableLength = messageLength - currIndex;
+		nextBlock = new StringBuffer();
+
+		if (availableLength == 0) {
+			currIndex++;
+			nextBlock.append("ffffffffffffffff");
+
+		} else if (availableLength < 16) {
+			String hexChar = Integer.toHexString(16 - availableLength);
+			nextBlock.append(message.substring(currIndex));
+			for (int i = 0; i < 16 - availableLength; ++i) {
+				nextBlock.append(hexChar);
+			}
+
+		} else {
+			nextBlock.append(message.substring(currIndex, currIndex + 16));
+		}
+		currIndex += 16;
+		result.append(encryptBlock(nextBlock.toString()));
+	}
+	return result.toString();
+
+}
+
 /**
  * Encrypts a single block given the hexadecimal representation of the plaintext
  *
- * @param block The hexadecimal representation of the block to encrypt, as a {@link String}
+ * @param block The hexadecimal representation of the block to encrypt
+ * @return The hexadecimal representation of the ciphertext, as a [@link String}
  */
 public String encryptBlock(String block) {
 	int subblocks[] = processSubblocks(block);
@@ -193,16 +254,21 @@ private String reconstructBlock(int[] subblocks) {
 	for (int i = 3; i >= 0; --i) {
 		block += (long) (subblocks[i]) << ((3 - i) * 16);
 	}
-	return Long.toHexString(block);
+	StringBuffer sb = new StringBuffer("");
+	for (int i = 0; i < Long.numberOfLeadingZeros(block) / 4; ++i) {
+		sb.append('0');
+	}
+	sb.append(Long.toHexString(block));
+	return sb.toString();
 }
 
 public static void main(String args[]) {
 	EncryptionModule e = new EncryptionModule("10002000300040005000600070008");
-	String message = "100020003";
-	String ciphertext = e.encryptBlock(message);
+	String message = "0000000100020003";
+	String ciphertext = e.encrypt(message);
 	System.out.println(ciphertext);
 
-	String plaintext = e.decrpyptBlock(ciphertext);
+	String plaintext = e.decrypt(ciphertext);
 	System.out.println(plaintext);
 }
 }
